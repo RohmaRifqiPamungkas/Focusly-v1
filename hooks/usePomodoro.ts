@@ -3,6 +3,29 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { PomodoroState, PomodoroMode, PomodoroSession } from '@/types'
 import { generateId } from '@/lib/utils'
 
+function playCompletionSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AudioCtx()
+    // Ascending C major triad arpeggio: C5 → E5 → G5
+    const notes = [523.25, 659.25, 783.99]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const t = ctx.currentTime + i * 0.22
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(0.28, t + 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.4)
+      osc.start(t)
+      osc.stop(t + 1.4)
+    })
+  } catch { /* Web Audio API not available */ }
+}
+
 const STORAGE_KEY = 'devhub-pomodoro'
 
 const DEFAULT_SETTINGS = { focus: 25, shortBreak: 5, longBreak: 15, dailyGoal: 8 }
@@ -19,6 +42,14 @@ const DEFAULT_STATE: PomodoroState = {
 export function usePomodoro() {
   const [state, setState] = useState<PomodoroState>(DEFAULT_STATE)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevTimeRef = useRef(state.timeRemaining)
+
+  useEffect(() => {
+    if (prevTimeRef.current > 0 && state.timeRemaining === 0) {
+      playCompletionSound()
+    }
+    prevTimeRef.current = state.timeRemaining
+  }, [state.timeRemaining])
 
   useEffect(() => {
     try {

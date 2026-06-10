@@ -54,12 +54,12 @@ function CircularProgress({ progress, timeRemaining, label }: { progress: number
   )
 }
 
-function WeekChart({ sessions }: { sessions: { day: string; count: number; isToday: boolean }[] }) {
+function WeekChart({ sessions }: { sessions: { key: number; day: string; count: number; isToday: boolean }[] }) {
   const max = Math.max(...sessions.map((s) => s.count), 1)
   return (
     <div className="flex items-end gap-1.5 h-16">
-      {sessions.map(({ day, count, isToday }) => (
-        <div key={day} className="flex flex-col items-center gap-1 flex-1">
+      {sessions.map(({ key, day, count, isToday }) => (
+        <div key={key} className="flex flex-col items-center gap-1 flex-1">
           <div
             className={cn(
               'w-full rounded-sm transition-all',
@@ -85,7 +85,7 @@ export function PomodoroContent() {
     const dayStr = d.toDateString()
     const isToday = i === 6
     const count = state.sessions.filter((s) => new Date(s.completedAt).toDateString() === dayStr && s.mode === 'focus').length
-    return { day: ['M', 'T', 'W', 'T', 'F', 'S', 'S'][d.getDay() === 0 ? 6 : d.getDay() - 1], count, isToday }
+    return { key: i, day: ['M', 'T', 'W', 'T', 'F', 'S', 'S'][d.getDay() === 0 ? 6 : d.getDay() - 1], count, isToday }
   })
 
   return (
