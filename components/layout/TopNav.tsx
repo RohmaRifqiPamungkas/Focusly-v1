@@ -1,5 +1,6 @@
 'use client'
-import { Search, Bell, Sun, Moon, Command } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, Bell, Sun, Moon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,14 +11,11 @@ import {
 
 export function TopNav() {
   const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
 
-  if (!resolvedTheme) {
-    // Prevent hydration mismatch while next-themes resolves the theme on the client
-    return null
-  }
+  useEffect(() => setMounted(true), [])
 
   return (
-
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-md px-6">
       {/* Search */}
       <div className="relative flex-1 max-w-md">
@@ -43,16 +41,19 @@ export function TopNav() {
           <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
         </Button>
 
-        {/* Theme toggle */}
+        {/* Theme toggle — suppress until mounted to avoid server/client mismatch */}
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
           onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          suppressHydrationWarning
         >
-          {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {mounted
+            ? resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />
+            : <Moon className="w-4 h-4" />
+          }
         </Button>
-
 
         {/* User avatar */}
         <DropdownMenu>
