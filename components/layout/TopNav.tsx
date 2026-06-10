@@ -9,9 +9,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 export function TopNav() {
-  const { theme, setTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
+
+  if (!resolvedTheme) {
+    // Prevent hydration mismatch while next-themes resolves the theme on the client
+    return null
+  }
 
   return (
+
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-md px-6">
       {/* Search */}
       <div className="relative flex-1 max-w-md">
@@ -42,10 +48,11 @@ export function TopNav() {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
         >
-          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
+
 
         {/* User avatar */}
         <DropdownMenu>
