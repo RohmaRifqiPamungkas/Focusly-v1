@@ -2,12 +2,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { PomodoroState, PomodoroMode, PomodoroSession } from '@/types'
 import { generateId } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 function playCompletionSound() {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = new AudioCtx()
-    // Ascending C major triad arpeggio: C5 → E5 → G5
     const notes = [523.25, 659.25, 783.99]
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator()
@@ -26,7 +26,8 @@ function playCompletionSound() {
   } catch { /* Web Audio API not available */ }
 }
 
-const STORAGE_KEY = 'devhub-pomodoro'
+// Timer state stays local — only settings and completed sessions go to Supabase
+const TIMER_KEY = 'devhub-pomodoro-timer'
 
 const DEFAULT_SETTINGS = { focus: 25, shortBreak: 5, longBreak: 15, dailyGoal: 8 }
 
@@ -41,9 +42,11 @@ const DEFAULT_STATE: PomodoroState = {
 
 export function usePomodoro() {
   const [state, setState] = useState<PomodoroState>(DEFAULT_STATE)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevTimeRef = useRef(state.timeRemaining)
 
+  // Play sound on completion
   useEffect(() => {
     if (prevTimeRef.current > 0 && state.timeRemaining === 0) {
       playCompletionSound()
@@ -51,33 +54,80 @@ export function usePomodoro() {
     prevTimeRef.current = state.timeRemaining
   }, [state.timeRemaining])
 
+  // Load timer state from localStorage and settings from Supabase
   useEffect(() => {
+    // Restore timer position from localStorage
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = localStorage.getItem(TIMER_KEY)
       if (stored) {
         const parsed: PomodoroState = JSON.parse(stored)
         if (parsed.isRunning && parsed.startedAt) {
           const elapsed = Math.floor((Date.now() - parsed.startedAt) / 1000)
           const newRemaining = Math.max(0, parsed.timeRemaining - elapsed)
-          if (newRemaining > 0) {
-            setState({ ...parsed, timeRemaining: newRemaining, startedAt: Date.now() })
-          } else {
-            setState({ ...parsed, isRunning: false, timeRemaining: 0 })
-          }
+          setState({
+            ...parsed,
+            timeRemaining: newRemaining > 0 ? newRemaining : 0,
+            isRunning: newRemaining > 0,
+            startedAt: newRemaining > 0 ? Date.now() : undefined,
+          })
         } else {
           setState(parsed)
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
+
+    // Load settings and today's sessions from Supabase
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setSettingsLoaded(true); return }
+
+      const [settingsRes, sessionsRes] = await Promise.all([
+        supabase.from('pomodoro_settings').select('*').eq('user_id', user.id).single(),
+        supabase
+          .from('pomodoro_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('completed_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
+      ])
+
+      const settings = settingsRes.data
+        ? {
+            focus: settingsRes.data.focus,
+            shortBreak: settingsRes.data.short_break,
+            longBreak: settingsRes.data.long_break,
+            dailyGoal: settingsRes.data.daily_goal,
+          }
+        : DEFAULT_SETTINGS
+
+      const sessions: PomodoroSession[] = (sessionsRes.data ?? []).map((r) => ({
+        id: r.id,
+        mode: r.mode as PomodoroMode,
+        duration: r.duration,
+        completedAt: r.completed_at,
+      }))
+
+      setState((prev) => {
+        const duration = getModeDuration(prev.mode, settings)
+        return {
+          ...prev,
+          settings,
+          sessions,
+          // Only reset timeRemaining if we have fresh settings and no saved timer
+          timeRemaining: localStorage.getItem(TIMER_KEY) ? prev.timeRemaining : duration,
+        }
+      })
+      setSettingsLoaded(true)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const save = useCallback((s: PomodoroState) => {
+  // Persist timer position to localStorage every tick
+  const saveTimer = useCallback((s: PomodoroState) => {
     setState(s)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch { /* ignore */ }
+    try { localStorage.setItem(TIMER_KEY, JSON.stringify(s)) } catch { /* ignore */ }
   }, [])
 
+  // Countdown interval
   useEffect(() => {
     if (state.isRunning) {
       intervalRef.current = setInterval(() => {
@@ -88,9 +138,23 @@ export function usePomodoro() {
             const session: PomodoroSession = {
               id: generateId(),
               mode: prev.mode,
-              duration: prev.settings[prev.mode === 'focus' ? 'focus' : prev.mode === 'short-break' ? 'shortBreak' : 'longBreak'] * 60,
+              duration:
+                prev.settings[
+                  prev.mode === 'focus' ? 'focus' : prev.mode === 'short-break' ? 'shortBreak' : 'longBreak'
+                ] * 60,
               completedAt: new Date().toISOString(),
             }
+            // Persist completed session to Supabase
+            createClient().auth.getUser().then(({ data: { user } }) => {
+              if (!user) return
+              createClient().from('pomodoro_sessions').insert({
+                id: session.id,
+                user_id: user.id,
+                mode: session.mode,
+                duration: session.duration,
+                completed_at: session.completedAt,
+              })
+            })
             const next: PomodoroState = {
               ...prev,
               isRunning: false,
@@ -98,11 +162,11 @@ export function usePomodoro() {
               sessions: [...prev.sessions, session],
               startedAt: undefined,
             }
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+            try { localStorage.setItem(TIMER_KEY, JSON.stringify(next)) } catch { /* ignore */ }
             return next
           }
           const next = { ...prev, timeRemaining: newRemaining }
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+          try { localStorage.setItem(TIMER_KEY, JSON.stringify(next)) } catch { /* ignore */ }
           return next
         })
       }, 1000)
@@ -113,17 +177,17 @@ export function usePomodoro() {
   }, [state.isRunning])
 
   const start = useCallback(() => {
-    save({ ...state, isRunning: true, startedAt: Date.now() })
-  }, [state, save])
+    saveTimer({ ...state, isRunning: true, startedAt: Date.now() })
+  }, [state, saveTimer])
 
   const pause = useCallback(() => {
-    save({ ...state, isRunning: false, startedAt: undefined })
-  }, [state, save])
+    saveTimer({ ...state, isRunning: false, startedAt: undefined })
+  }, [state, saveTimer])
 
   const reset = useCallback(() => {
     const duration = getModeDuration(state.mode, state.settings)
-    save({ ...state, isRunning: false, timeRemaining: duration, startedAt: undefined })
-  }, [state, save])
+    saveTimer({ ...state, isRunning: false, timeRemaining: duration, startedAt: undefined })
+  }, [state, saveTimer])
 
   const setMode = useCallback((mode: PomodoroMode) => {
     const duration = getModeDuration(mode, state.settings)
@@ -132,8 +196,8 @@ export function usePomodoro() {
       'short-break': 'Short Break',
       'long-break': 'Long Break',
     }
-    save({ ...state, mode, isRunning: false, timeRemaining: duration, startedAt: undefined, label: labelMap[mode] })
-  }, [state, save])
+    saveTimer({ ...state, mode, isRunning: false, timeRemaining: duration, startedAt: undefined, label: labelMap[mode] })
+  }, [state, saveTimer])
 
   const skip = useCallback(() => {
     const modeOrder: PomodoroMode[] = ['focus', 'short-break', 'long-break']
@@ -141,10 +205,24 @@ export function usePomodoro() {
     setMode(next)
   }, [state.mode, setMode])
 
-  const updateSettings = useCallback((settings: typeof DEFAULT_SETTINGS) => {
-    const duration = getModeDuration(state.mode, settings)
-    save({ ...state, settings, timeRemaining: duration, isRunning: false, startedAt: undefined })
-  }, [state, save])
+  const updateSettings = useCallback(
+    async (settings: typeof DEFAULT_SETTINGS) => {
+      const duration = getModeDuration(state.mode, settings)
+      saveTimer({ ...state, settings, timeRemaining: duration, isRunning: false, startedAt: undefined })
+
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('pomodoro_settings').upsert({
+        user_id: user.id,
+        focus: settings.focus,
+        short_break: settings.shortBreak,
+        long_break: settings.longBreak,
+        daily_goal: settings.dailyGoal,
+      })
+    },
+    [state, saveTimer]
+  )
 
   const todaySessions = state.sessions.filter((s) => {
     const today = new Date().toDateString()
@@ -160,6 +238,7 @@ export function usePomodoro() {
 
   return {
     state,
+    settingsLoaded,
     start,
     pause,
     reset,
