@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ListTodo, Timer, StickyNote, Code2,
   Braces, Clock, Settings, User, LogOut, HelpCircle, X,
@@ -104,7 +105,7 @@ export function Sidebar() {
   // Close on route change
   useEffect(() => { setOpen(false) }, [pathname, setOpen])
 
-  // Lock body scroll when drawer is open
+  // Lock body scroll when mobile drawer is open
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -112,36 +113,51 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop — always visible */}
+      {/* Desktop sidebar — always in document flow at lg+ */}
       <aside className="hidden lg:flex flex-col w-[220px] min-h-screen border-r border-border bg-sidebar shrink-0">
         <SidebarContent />
       </aside>
 
-      {/* Mobile backdrop */}
-      <div
-        className={cn(
-          'fixed inset-0 z-40 bg-black/50 lg:hidden transition-opacity duration-300',
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        )}
-        onClick={() => setOpen(false)}
-      />
+      {/*
+        Mobile drawer — conditionally mounted so it is NEVER in the DOM on
+        desktop. This avoids Safari bugs where CSS-transform + lg:hidden can
+        conflict and let the drawer bleed through at desktop widths.
+      */}
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="sidebar-backdrop"
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setOpen(false)}
+            />
 
-      {/* Mobile drawer */}
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[260px] bg-sidebar border-r border-border flex flex-col transition-transform duration-300 ease-in-out lg:hidden',
-          open ? 'translate-x-0' : '-translate-x-full'
+            {/* Drawer */}
+            <motion.aside
+              key="sidebar-drawer"
+              className="fixed inset-y-0 left-0 z-50 w-[260px] bg-sidebar border-r border-border flex flex-col lg:hidden"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.25, ease: 'easeInOut' }}
+            >
+              <button
+                onClick={() => setOpen(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <SidebarContent onNavigate={() => setOpen(false)} />
+            </motion.aside>
+          </>
         )}
-      >
-        <button
-          onClick={() => setOpen(false)}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          aria-label="Close menu"
-        >
-          <X className="w-4 h-4" />
-        </button>
-        <SidebarContent onNavigate={() => setOpen(false)} />
-      </aside>
+      </AnimatePresence>
     </>
   )
 }
