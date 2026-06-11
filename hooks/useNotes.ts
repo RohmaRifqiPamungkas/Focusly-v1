@@ -1,84 +1,109 @@
 'use client'
-import { useCallback } from 'react'
-import { useLocalStorage } from './useLocalStorage'
+import { useState, useEffect, useCallback } from 'react'
 import { Note } from '@/types'
 import { generateId } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
-const STORAGE_KEY = 'devhub-notes'
+type DbNote = {
+  id: string
+  title: string
+  content: string
+  tags: string[]
+  pinned: boolean
+  created_at: string
+  updated_at: string
+}
 
-const INITIAL_NOTES: Note[] = [
-  {
-    id: '1',
-    title: 'Architecture Meeting Notes',
-    content: 'Discussed the transition to microservices for the payment module. Key decisions: use gRPC for internal communication, deploy on K8s.',
-    tags: ['architecture', 'meeting'],
-    pinned: true,
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: '2',
-    title: 'Ideas for Q3 Hackathon',
-    content: 'AI driven code review tool leveraging the new Anthropic API. Could integrate with GitHub PR workflow.',
-    tags: ['ideas', 'hackathon', 'ai'],
-    pinned: false,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: '3',
-    title: 'Deployment Checklist',
-    content: '1. Backup DB\n2. Run migrations\n3. Swap staging to blue\n4. Monitor error rates\n5. Notify team on Slack',
-    tags: ['devops', 'checklist'],
-    pinned: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-]
+function toNote(row: DbNote): Note {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    tags: row.tags ?? [],
+    pinned: row.pinned,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
 
 export function useNotes() {
-  const [notes, setNotes] = useLocalStorage<Note[]>(STORAGE_KEY, INITIAL_NOTES)
+  const [notes, setNotes] = useState<Note[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setLoading(false); return }
+      supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .then(({ data }) => {
+          if (data) setNotes((data as DbNote[]).map(toNote))
+          setLoading(false)
+        })
+    })
+  }, [])
 
   const addNote = useCallback(
-    (data: { title: string; content: string; tags: string[] }) => {
+    async (data: { title: string; content: string; tags: string[] }) => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
       const now = new Date().toISOString()
-      const newNote: Note = {
-        ...data,
-        id: generateId(),
+      const id = generateId()
+      const optimistic: Note = { ...data, id, pinned: false, createdAt: now, updatedAt: now }
+      setNotes((prev) => [optimistic, ...prev])
+      await supabase.from('notes').insert({
+        id,
+        user_id: user.id,
+        title: data.title,
+        content: data.content,
+        tags: data.tags,
         pinned: false,
-        createdAt: now,
-        updatedAt: now,
-      }
-      setNotes((prev) => [newNote, ...prev])
+        created_at: now,
+        updated_at: now,
+      })
     },
-    [setNotes]
+    []
   )
 
   const updateNote = useCallback(
-    (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
+    async (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
+      const updatedAt = new Date().toISOString()
       setNotes((prev) =>
-        prev.map((n) =>
-          n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n
-        )
+        prev.map((n) => (n.id === id ? { ...n, ...updates, updatedAt } : n))
       )
+      const supabase = createClient()
+      const dbPatch: Record<string, unknown> = { updated_at: updatedAt }
+      if ('title' in updates) dbPatch.title = updates.title
+      if ('content' in updates) dbPatch.content = updates.content
+      if ('tags' in updates) dbPatch.tags = updates.tags
+      if ('pinned' in updates) dbPatch.pinned = updates.pinned
+      await supabase.from('notes').update(dbPatch).eq('id', id)
     },
-    [setNotes]
+    []
   )
 
-  const deleteNote = useCallback(
-    (id: string) => {
-      setNotes((prev) => prev.filter((n) => n.id !== id))
-    },
-    [setNotes]
-  )
+  const deleteNote = useCallback(async (id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id))
+    const supabase = createClient()
+    await supabase.from('notes').delete().eq('id', id)
+  }, [])
 
   const togglePin = useCallback(
-    (id: string) => {
-      setNotes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n))
-      )
+    async (id: string) => {
+      setNotes((prev) => {
+        const note = prev.find((n) => n.id === id)
+        if (!note) return prev
+        const pinned = !note.pinned
+        const supabase = createClient()
+        supabase.from('notes').update({ pinned, updated_at: new Date().toISOString() }).eq('id', id)
+        return prev.map((n) => (n.id === id ? { ...n, pinned } : n))
+      })
     },
-    [setNotes]
+    []
   )
 
   const sortedNotes = [...notes].sort((a, b) => {
@@ -87,5 +112,5 @@ export function useNotes() {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 
-  return { notes: sortedNotes, addNote, updateNote, deleteNote, togglePin }
+  return { notes: sortedNotes, loading, addNote, updateNote, deleteNote, togglePin }
 }
