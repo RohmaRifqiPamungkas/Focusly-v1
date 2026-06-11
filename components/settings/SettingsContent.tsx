@@ -1,14 +1,15 @@
 'use client'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Moon, Sun, Monitor, Bell, Timer, User, Trash2, Save } from 'lucide-react'
+import { Moon, Sun, Monitor, Bell, Timer, User, Trash2, Save, LogOut } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { usePomodoro } from '@/hooks/usePomodoro'
+import { useAuth } from '@/hooks/useAuth'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +18,7 @@ const section = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 export function SettingsContent() {
   const { theme, setTheme } = useTheme()
   const { state, updateSettings } = usePomodoro()
+  const { user, signOut } = useAuth()
   const [pomSettings, setPomSettings] = useState({
     focus: state.settings.focus,
     shortBreak: state.settings.shortBreak,
@@ -26,6 +28,7 @@ export function SettingsContent() {
   const [saved, setSaved] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [autoStart, setAutoStart] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   const savePomodoro = () => {
     updateSettings(pomSettings)
@@ -33,11 +36,20 @@ export function SettingsContent() {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const clearAllData = () => {
-    if (confirm('This will delete all your tasks, notes, and timer history. Are you sure?')) {
-      localStorage.clear()
-      window.location.reload()
-    }
+  const clearAllData = async () => {
+    if (!confirm('This will delete all your tasks, notes, and timer history. Are you sure?')) return
+    if (!user) return
+    setClearing(true)
+    const supabase = createClient()
+    await Promise.all([
+      supabase.from('notes').delete().eq('user_id', user.id),
+      supabase.from('tasks').delete().eq('user_id', user.id),
+      supabase.from('pomodoro_sessions').delete().eq('user_id', user.id),
+      supabase.from('pomodoro_settings').delete().eq('user_id', user.id),
+    ])
+    localStorage.removeItem('devhub-pomodoro-timer')
+    setClearing(false)
+    window.location.reload()
   }
 
   const THEMES = [
@@ -171,17 +183,13 @@ export function SettingsContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Display Name</Label>
-                  <Input defaultValue="Alex Johnson" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input defaultValue="alex@example.com" type="email" />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input value={user?.email ?? ''} readOnly className="bg-muted" />
               </div>
-              <Button size="sm">Update Profile</Button>
+              <Button variant="outline" size="sm" className="gap-2" onClick={signOut}>
+                <LogOut className="w-3.5 h-3.5" /> Sign out
+              </Button>
             </CardContent>
           </Card>
         </motion.div>
@@ -201,8 +209,8 @@ export function SettingsContent() {
                   <p className="text-sm font-medium">Clear all data</p>
                   <p className="text-xs text-muted-foreground">Delete all tasks, notes, and history</p>
                 </div>
-                <Button variant="destructive" size="sm" onClick={clearAllData} className="gap-2">
-                  <Trash2 className="w-3.5 h-3.5" /> Clear Data
+                <Button variant="destructive" size="sm" onClick={clearAllData} disabled={clearing} className="gap-2">
+                  <Trash2 className="w-3.5 h-3.5" /> {clearing ? 'Clearing…' : 'Clear Data'}
                 </Button>
               </div>
             </CardContent>
