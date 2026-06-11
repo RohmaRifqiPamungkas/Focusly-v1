@@ -2,8 +2,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, Search, Filter, ArrowUpDown, Trash2, Edit3, Calendar,
-  Circle, CheckCircle2, Clock, GripVertical,
+  Plus, Search, Trash2, Edit3, Calendar,
+  Circle, GripVertical,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -55,9 +55,7 @@ const DEFAULT_FORM: TaskFormData = {
   status: 'todo', category: '', deadline: '',
 }
 
-function TaskDialog({
-  open, onClose, onSave, initial,
-}: {
+function TaskDialog({ open, onClose, onSave, initial }: {
   open: boolean
   onClose: () => void
   onSave: (data: TaskFormData) => void
@@ -73,7 +71,7 @@ function TaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{initial ? 'Edit Task' : 'New Task'}</DialogTitle>
         </DialogHeader>
@@ -117,7 +115,7 @@ function TaskDialog({
             </div>
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-row justify-end">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={() => { if (form.title.trim()) { onSave(form); onClose() } }}>
             {initial ? 'Save Changes' : 'Add Task'}
@@ -128,9 +126,7 @@ function TaskDialog({
   )
 }
 
-function SortableTaskItem({
-  task, onToggle, onEdit, onDelete,
-}: {
+function SortableTaskItem({ task, onToggle, onEdit, onDelete }: {
   task: Task
   onToggle: () => void
   onEdit: () => void
@@ -143,52 +139,68 @@ function SortableTaskItem({
     <motion.div
       ref={setNodeRef} style={style}
       className={cn(
-        'flex items-center gap-3 px-5 py-3.5 border-b border-border last:border-0 group',
+        'flex items-start sm:items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-border last:border-0 group',
         isDragging && 'opacity-50 bg-accent/30'
       )}
       layout
     >
-      <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Drag handle — desktop only */}
+      <button
+        {...attributes} {...listeners}
+        className="hidden sm:block cursor-grab active:cursor-grabbing text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
+      >
         <GripVertical className="w-4 h-4" />
       </button>
 
+      {/* Toggle */}
       <button
         onClick={onToggle}
         className={cn(
-          'w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer',
+          'w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer mt-0.5',
           task.status === 'completed' ? 'border-success bg-success/10' : 'border-border hover:border-primary'
         )}
       >
         {task.status === 'completed' && <div className="w-2 h-2 rounded-full bg-success" />}
       </button>
 
+      {/* Title + meta */}
       <div className="flex-1 min-w-0">
         <p className={cn('text-sm', task.status === 'completed' && 'line-through text-muted-foreground')}>
           {task.title}
         </p>
-        {task.deadline && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <Calendar className="w-3 h-3 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              {format(new Date(task.deadline), 'MMM d')}
-            </span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+          {task.deadline && (
+            <div className="flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{format(new Date(task.deadline), 'MMM d')}</span>
+            </div>
+          )}
+          {/* Status badge — visible on mobile below title */}
+          <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted-foreground">
+            <div className={cn('w-1.5 h-1.5 rounded-full', statusDot(task.status))} />
+            {statusLabel(task.status)}
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <Badge variant={priorityVariant(task.priority)}>
+      {/* Right side */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <Badge variant={priorityVariant(task.priority)} className="capitalize">
           {task.priority}
         </Badge>
-        <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded-full border border-border text-xs text-muted-foreground')}>
+
+        {/* Status pill — desktop only */}
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full border border-border text-xs text-muted-foreground">
           <div className={cn('w-1.5 h-1.5 rounded-full', statusDot(task.status))} />
           {statusLabel(task.status)}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={onEdit} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+
+        {/* Actions — always visible on mobile, hover on desktop */}
+        <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+          <button onClick={onEdit} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
             <Edit3 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={onDelete} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer">
+          <button onClick={onDelete} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -243,18 +255,20 @@ export function TodoContent() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-        className="flex items-start justify-between gap-4 mb-8"
+        className="flex items-start justify-between gap-4 mb-6 sm:mb-8"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground mt-1">Manage your daily development pipeline.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Tasks</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage your daily development pipeline.</p>
         </div>
-        <Button onClick={() => { setEditTask(null); setDialogOpen(true) }} className="gap-2 shrink-0">
-          <Plus className="w-4 h-4" /> New Task
+        <Button onClick={() => { setEditTask(null); setDialogOpen(true) }} className="gap-2 shrink-0" size="sm">
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">New Task</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       </motion.div>
 
@@ -262,16 +276,11 @@ export function TodoContent() {
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Search tasks, notes, snippets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <Input className="pl-9" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="flex items-center gap-2">
           <Select value={filterPriority} onValueChange={setFilterPriority}>
-            <SelectTrigger className="w-32 h-9">
+            <SelectTrigger className="flex-1 sm:w-32 h-9">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
             <SelectContent>
@@ -280,7 +289,7 @@ export function TodoContent() {
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-32 h-9">
+            <SelectTrigger className="flex-1 sm:w-32 h-9">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -291,14 +300,14 @@ export function TodoContent() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 mb-6 border-b border-border">
+      {/* Tabs — scrollable on mobile */}
+      <div className="flex items-center gap-1 mb-6 border-b border-border overflow-x-auto scrollbar-none">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-2 cursor-pointer',
+              'px-3 sm:px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-2 cursor-pointer whitespace-nowrap',
               activeTab === tab.id
                 ? 'border-primary text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -352,7 +361,6 @@ export function TodoContent() {
         </p>
       )}
 
-      {/* Dialog */}
       <TaskDialog
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditTask(null) }}

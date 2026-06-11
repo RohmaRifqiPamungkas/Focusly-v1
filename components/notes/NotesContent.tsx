@@ -44,7 +44,7 @@ function NoteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial ? 'Edit Note' : 'New Note'}</DialogTitle>
         </DialogHeader>
@@ -75,7 +75,7 @@ function NoteDialog({
             />
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-row justify-end">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={() => {
@@ -111,7 +111,7 @@ function NoteCard({
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-medium text-sm text-foreground line-clamp-1 flex-1">{note.title}</h3>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
           <button
             onClick={onPin}
             className={cn(
@@ -178,21 +178,24 @@ export function NotesContent() {
   })
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-        className="flex items-start justify-between gap-4 mb-8"
+        className="flex items-start justify-between gap-4 mb-6 sm:mb-8"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Quick Notes</h1>
-          <p className="text-muted-foreground mt-1">Capture ideas, meeting notes, and more.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Quick Notes</h1>
+          <p className="text-sm text-muted-foreground mt-1">Capture ideas, meeting notes, and more.</p>
         </div>
         <Button
           onClick={() => { setEditNote(null); setDialogOpen(true) }}
           className="gap-2 shrink-0"
+          size="sm"
         >
-          <Plus className="w-4 h-4" /> New Note
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">New Note</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       </motion.div>
 

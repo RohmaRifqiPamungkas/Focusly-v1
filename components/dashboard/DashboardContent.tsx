@@ -71,26 +71,30 @@ export function DashboardContent() {
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening'
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sm:mb-8"
       >
         <div>
-          <h1 className="text-3xl font-bold text-foreground">{greeting}, Alex</h1>
-          <p className="text-muted-foreground mt-1">Here&apos;s what&apos;s happening today.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{greeting}, Alex</h1>
+          <p className="text-sm text-muted-foreground mt-1">Here&apos;s what&apos;s happening today.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link href="/todo">
             <Button variant="outline" size="sm" className="gap-2">
-              <Plus className="w-4 h-4" /> New Task
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Task</span>
+              <span className="sm:hidden">Task</span>
             </Button>
           </Link>
           <Link href="/pomodoro">
             <Button size="sm" className="gap-2">
-              <Play className="w-4 h-4" /> Start Focus
+              <Play className="w-4 h-4" />
+              <span className="hidden sm:inline">Start Focus</span>
+              <span className="sm:hidden">Focus</span>
             </Button>
           </Link>
         </div>
@@ -99,7 +103,7 @@ export function DashboardContent() {
       {/* Stats cards */}
       <motion.div
         variants={container} initial="hidden" animate="show"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8"
       >
         {[
           {
@@ -137,21 +141,21 @@ export function DashboardContent() {
         ].map(({ label, value, icon: Icon, extra }, i) => (
           <motion.div
             key={label} variants={item}
-            className="rounded-xl border border-border bg-card p-5"
+            className="rounded-xl border border-border bg-card p-3 sm:p-5"
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">{label}</span>
-              <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
-                <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <span className="text-[9px] sm:text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">{label}</span>
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-muted flex items-center justify-center">
+                <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
               </div>
             </div>
-            {extra ?? <div className="text-3xl font-bold text-foreground">{value}</div>}
+            {extra ?? <div className="text-2xl sm:text-3xl font-bold text-foreground">{value}</div>}
           </motion.div>
         ))}
       </motion.div>
 
       {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-6">
         {/* Today's Tasks */}
         <motion.div
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
@@ -169,7 +173,7 @@ export function DashboardContent() {
           </div>
           <div className="divide-y divide-border">
             {todayTasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-4 px-5 py-3.5">
+              <div key={task.id} className="flex items-center gap-3 px-4 sm:px-5 py-3">
                 <div className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${task.status === 'completed' ? 'bg-primary border-primary' : 'border-border'}`}>
                   {task.status === 'completed' && (
                     <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -177,15 +181,15 @@ export function DashboardContent() {
                     </svg>
                   )}
                 </div>
-                <span className={`flex-1 text-sm ${task.status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                <span className={`flex-1 text-sm truncate ${task.status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                   {task.title}
                 </span>
-                <div className="flex items-center gap-2">
-                  <Badge variant={priorityVariant(task.priority)}>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge variant={priorityVariant(task.priority)} className="capitalize">
                     {task.priority}
                   </Badge>
                   {task.category && (
-                    <span className="text-xs text-muted-foreground border border-border rounded px-2 py-0.5">
+                    <span className="hidden sm:inline text-xs text-muted-foreground border border-border rounded px-2 py-0.5">
                       {task.category}
                     </span>
                   )}
