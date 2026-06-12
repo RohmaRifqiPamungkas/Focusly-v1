@@ -91,7 +91,7 @@ export function TimestampContent() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">Timestamp Converter</h1>
         <p className="text-muted-foreground mt-1">Convert between Unix timestamps and human-readable dates.</p>

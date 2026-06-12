@@ -58,11 +58,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="px-3 pb-4 space-y-0.5">
+
         <div className="px-2 py-3">
           <button className="w-full bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">
             Upgrade to Plus
           </button>
         </div>
+        <div className="h-px bg-border mx-2 my-2" />
 
         {bottomItems.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href

@@ -49,7 +49,7 @@ export function Base64Content() {
   const clear = () => { setInput(''); setOutput(''); setError('') }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">Base64 Encoder / Decoder</h1>
         <p className="text-muted-foreground mt-1">Encode text to Base64 or decode Base64 strings.</p>
