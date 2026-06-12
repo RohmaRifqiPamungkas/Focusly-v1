@@ -33,6 +33,7 @@ function toTask(row: DbTask): Task {
 export function useTodos() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -43,8 +44,13 @@ export function useTodos() {
         .select('*')
         .eq('user_id', user.id)
         .order('order', { ascending: true })
-        .then(({ data }) => {
-          if (data) setTasks((data as DbTask[]).map(toTask))
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[useTodos] fetch error:', error)
+            setError(error.message)
+          } else if (data) {
+            setTasks((data as DbTask[]).map(toTask))
+          }
           setLoading(false)
         })
     })
@@ -61,12 +67,16 @@ export function useTodos() {
     }) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        console.error('[useTodos] addTask: no authenticated user')
+        return
+      }
       const id = generateId()
       const now = new Date().toISOString()
       const newTask: Task = { ...data, id, createdAt: now, order: tasks.length }
       setTasks((prev) => [...prev, newTask])
-      await supabase.from('tasks').insert({
+
+      const { error } = await supabase.from('tasks').insert({
         id,
         user_id: user.id,
         title: data.title,
@@ -78,6 +88,12 @@ export function useTodos() {
         created_at: now,
         order: tasks.length,
       })
+
+      if (error) {
+        console.error('[useTodos] insert error:', error)
+        setError(error.message)
+        setTasks((prev) => prev.filter((t) => t.id !== id))
+      }
     },
     [tasks.length]
   )
@@ -94,7 +110,9 @@ export function useTodos() {
       if ('category' in updates) dbPatch.category = updates.category ?? null
       if ('deadline' in updates) dbPatch.deadline = updates.deadline ?? null
       if ('order' in updates) dbPatch.order = updates.order
-      await supabase.from('tasks').update(dbPatch).eq('id', id)
+
+      const { error } = await supabase.from('tasks').update(dbPatch).eq('id', id)
+      if (error) console.error('[useTodos] update error:', error)
     },
     []
   )
@@ -102,7 +120,8 @@ export function useTodos() {
   const deleteTask = useCallback(async (id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id))
     const supabase = createClient()
-    await supabase.from('tasks').delete().eq('id', id)
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) console.error('[useTodos] delete error:', error)
   }, [])
 
   const toggleTask = useCallback(async (id: string) => {
@@ -111,7 +130,9 @@ export function useTodos() {
       const updated = prev.map((t) => {
         if (t.id !== id) return t
         const status: TaskStatus = t.status === 'completed' ? 'todo' : 'completed'
-        supabase.from('tasks').update({ status }).eq('id', id)
+        supabase.from('tasks').update({ status }).eq('id', id).then(({ error }) => {
+          if (error) console.error('[useTodos] toggle error:', error)
+        })
         return { ...t, status }
       })
       return updated
@@ -121,10 +142,13 @@ export function useTodos() {
   const reorderTasks = useCallback(async (newTasks: Task[]) => {
     setTasks(newTasks)
     const supabase = createClient()
-    await Promise.all(
+    const results = await Promise.all(
       newTasks.map((t, i) => supabase.from('tasks').update({ order: i }).eq('id', t.id))
     )
+    results.forEach(({ error }) => {
+      if (error) console.error('[useTodos] reorder error:', error)
+    })
   }, [])
 
-  return { tasks, loading, addTask, updateTask, deleteTask, reorderTasks, toggleTask }
+  return { tasks, loading, error, addTask, updateTask, deleteTask, reorderTasks, toggleTask }
 }

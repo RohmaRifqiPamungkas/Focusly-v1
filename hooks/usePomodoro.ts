@@ -90,6 +90,13 @@ export function usePomodoro() {
           .gte('completed_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
       ])
 
+      if (settingsRes.error && settingsRes.error.code !== 'PGRST116') {
+        console.error('[usePomodoro] settings fetch error:', settingsRes.error)
+      }
+      if (sessionsRes.error) {
+        console.error('[usePomodoro] sessions fetch error:', sessionsRes.error)
+      }
+
       const settings = settingsRes.data
         ? {
             focus: settingsRes.data.focus,
@@ -147,13 +154,18 @@ export function usePomodoro() {
             // Persist completed session to Supabase
             createClient().auth.getUser().then(({ data: { user } }) => {
               if (!user) return
-              createClient().from('pomodoro_sessions').insert({
-                id: session.id,
-                user_id: user.id,
-                mode: session.mode,
-                duration: session.duration,
-                completed_at: session.completedAt,
-              })
+              createClient()
+                .from('pomodoro_sessions')
+                .insert({
+                  id: session.id,
+                  user_id: user.id,
+                  mode: session.mode,
+                  duration: session.duration,
+                  completed_at: session.completedAt,
+                })
+                .then(({ error }) => {
+                  if (error) console.error('[usePomodoro] session insert error:', error)
+                })
             })
             const next: PomodoroState = {
               ...prev,
@@ -213,13 +225,14 @@ export function usePomodoro() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      await supabase.from('pomodoro_settings').upsert({
+      const { error } = await supabase.from('pomodoro_settings').upsert({
         user_id: user.id,
         focus: settings.focus,
         short_break: settings.shortBreak,
         long_break: settings.longBreak,
         daily_goal: settings.dailyGoal,
       })
+      if (error) console.error('[usePomodoro] settings upsert error:', error)
     },
     [state, saveTimer]
   )

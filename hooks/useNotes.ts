@@ -29,6 +29,7 @@ function toNote(row: DbNote): Note {
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -39,8 +40,13 @@ export function useNotes() {
         .select('*')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
-        .then(({ data }) => {
-          if (data) setNotes((data as DbNote[]).map(toNote))
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[useNotes] fetch error:', error)
+            setError(error.message)
+          } else if (data) {
+            setNotes((data as DbNote[]).map(toNote))
+          }
           setLoading(false)
         })
     })
@@ -50,12 +56,16 @@ export function useNotes() {
     async (data: { title: string; content: string; tags: string[] }) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        console.error('[useNotes] addNote: no authenticated user')
+        return
+      }
       const now = new Date().toISOString()
       const id = generateId()
       const optimistic: Note = { ...data, id, pinned: false, createdAt: now, updatedAt: now }
       setNotes((prev) => [optimistic, ...prev])
-      await supabase.from('notes').insert({
+
+      const { error } = await supabase.from('notes').insert({
         id,
         user_id: user.id,
         title: data.title,
@@ -65,6 +75,12 @@ export function useNotes() {
         created_at: now,
         updated_at: now,
       })
+
+      if (error) {
+        console.error('[useNotes] insert error:', error)
+        setError(error.message)
+        setNotes((prev) => prev.filter((n) => n.id !== id))
+      }
     },
     []
   )
@@ -81,7 +97,9 @@ export function useNotes() {
       if ('content' in updates) dbPatch.content = updates.content
       if ('tags' in updates) dbPatch.tags = updates.tags
       if ('pinned' in updates) dbPatch.pinned = updates.pinned
-      await supabase.from('notes').update(dbPatch).eq('id', id)
+
+      const { error } = await supabase.from('notes').update(dbPatch).eq('id', id)
+      if (error) console.error('[useNotes] update error:', error)
     },
     []
   )
@@ -89,22 +107,26 @@ export function useNotes() {
   const deleteNote = useCallback(async (id: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== id))
     const supabase = createClient()
-    await supabase.from('notes').delete().eq('id', id)
+    const { error } = await supabase.from('notes').delete().eq('id', id)
+    if (error) console.error('[useNotes] delete error:', error)
   }, [])
 
-  const togglePin = useCallback(
-    async (id: string) => {
-      setNotes((prev) => {
-        const note = prev.find((n) => n.id === id)
-        if (!note) return prev
-        const pinned = !note.pinned
-        const supabase = createClient()
-        supabase.from('notes').update({ pinned, updated_at: new Date().toISOString() }).eq('id', id)
-        return prev.map((n) => (n.id === id ? { ...n, pinned } : n))
-      })
-    },
-    []
-  )
+  const togglePin = useCallback(async (id: string) => {
+    setNotes((prev) => {
+      const note = prev.find((n) => n.id === id)
+      if (!note) return prev
+      const pinned = !note.pinned
+      const supabase = createClient()
+      supabase
+        .from('notes')
+        .update({ pinned, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('[useNotes] togglePin error:', error)
+        })
+      return prev.map((n) => (n.id === id ? { ...n, pinned } : n))
+    })
+  }, [])
 
   const sortedNotes = [...notes].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1
@@ -112,5 +134,5 @@ export function useNotes() {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
 
-  return { notes: sortedNotes, loading, addNote, updateNote, deleteNote, togglePin }
+  return { notes: sortedNotes, loading, error, addNote, updateNote, deleteNote, togglePin }
 }
