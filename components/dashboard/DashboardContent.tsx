@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useTodos } from '@/hooks/useTodos'
 import { usePomodoro } from '@/hooks/usePomodoro'
 import { useNotes } from '@/hooks/useNotes'
+import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -53,18 +54,41 @@ function PomodoroCircle({ progress, time, label }: { progress: number; time: str
 
 export function DashboardContent() {
   const { tasks } = useTodos()
-  const { state, start, pause, skip, progress, focusTimeToday } = usePomodoro()
+  const { state, start, pause, skip, progress, focusTimeToday, todaySessions } = usePomodoro()
   const { notes } = useNotes()
+  const { user } = useAuth()
 
-  const stats = useMemo(() => ({
-    total: tasks.length,
-    completed: tasks.filter((t) => t.status === 'completed').length,
-    pending: tasks.filter((t) => t.status !== 'completed').length,
-    focusTime: focusTimeToday,
-    notes: notes.length,
-  }), [tasks, focusTimeToday, notes])
+  const today = new Date().toDateString()
 
-  const todayTasks = tasks.slice(0, 4)
+  const displayName = useMemo(() => {
+    const meta = user?.user_metadata?.full_name as string | undefined
+    if (meta) return meta.split(' ')[0]
+    return user?.email?.split('@')[0] ?? 'there'
+  }, [user])
+
+  const stats = useMemo(() => {
+    const completed = tasks.filter((t) => t.status === 'completed').length
+    const notesToday = notes.filter((n) => new Date(n.createdAt).toDateString() === today).length
+    const focusSessions = todaySessions.filter((s) => s.mode === 'focus').length
+    return {
+      total: tasks.length,
+      completed,
+      focusTime: focusTimeToday,
+      notes: notes.length,
+      notesToday,
+      focusSessions,
+      completionRate: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
+    }
+  }, [tasks, focusTimeToday, notes, todaySessions, today])
+
+  const todayTasks = useMemo(() => {
+    const withDeadlineToday = tasks.filter(
+      (t) => t.deadline && new Date(t.deadline).toDateString() === today
+    )
+    if (withDeadlineToday.length > 0) return withDeadlineToday.slice(0, 4)
+    return tasks.filter((t) => t.status !== 'completed').slice(0, 4)
+  }, [tasks, today])
+
   const recentNotes = notes.slice(0, 3)
 
   const hour = new Date().getHours()
@@ -79,7 +103,7 @@ export function DashboardContent() {
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sm:mb-8"
       >
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{greeting}, Alex</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{greeting}, {displayName}</h1>
           <p className="text-sm text-muted-foreground mt-1">Here&apos;s what&apos;s happening today.</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
@@ -131,12 +155,12 @@ export function DashboardContent() {
           {
             label: 'NOTES CREATED', value: stats.notes,
             icon: FileText,
-            extra: (
+            extra: stats.notesToday > 0 ? (
               <div className="flex items-center gap-1 mt-1">
                 <TrendingUp className="w-3 h-3 text-success" />
-                <span className="text-xs text-success">+2</span>
+                <span className="text-xs text-success">+{stats.notesToday} Today</span>
               </div>
-            ),
+            ) : null,
           },
         ].map(({ label, value, icon: Icon, extra }, i) => (
           <motion.div
@@ -162,7 +186,11 @@ export function DashboardContent() {
           className="rounded-xl border border-border bg-card"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">Today&apos;s Tasks</span>
+            <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              {tasks.some((t) => t.deadline && new Date(t.deadline).toDateString() === today)
+                ? "Due Today"
+                : "Pending Tasks"}
+            </span>
             <button className="text-muted-foreground hover:text-foreground">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <circle cx="12" cy="5" r="1" fill="currentColor" />
