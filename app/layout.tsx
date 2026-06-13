@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'DevHub Pro — Developer Productivity Suite',
+  title: 'Focusly Pro | Developer Productivity Suite',
   description: 'All your developer tools in one beautiful dashboard.',
 }
 

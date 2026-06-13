@@ -31,7 +31,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-5 py-6">
-        <h1 className="text-base font-bold text-foreground tracking-tight">DevHub Pro</h1>
+        <h1 className="text-base font-bold text-foreground tracking-tight">Focusly Pro</h1>
         <p className="text-xs text-muted-foreground mt-0.5">Productivity Suite</p>
       </div>
 

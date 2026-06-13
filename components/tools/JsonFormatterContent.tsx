@@ -41,7 +41,7 @@ function CodeEditor({
 
 export function JsonFormatterContent() {
   const [input, setInput] = useState(`{
-  "project": "DevHub",
+  "project": "Focusly",
   "version": 1.0,
   "active": true,
   "features": [

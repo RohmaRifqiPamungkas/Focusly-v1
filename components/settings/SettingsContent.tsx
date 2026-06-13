@@ -63,7 +63,7 @@ export function SettingsContent() {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-1">Customize your DevHub experience.</p>
+        <p className="text-muted-foreground mt-1">Customize your Focusly experience.</p>
       </motion.div>
 
       <div className="space-y-6">
@@ -74,7 +74,7 @@ export function SettingsContent() {
               <CardTitle className="flex items-center gap-2">
                 <Sun className="w-4 h-4" /> Appearance
               </CardTitle>
-              <CardDescription>Choose how DevHub looks for you.</CardDescription>
+              <CardDescription>Choose how Focusly looks for you.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

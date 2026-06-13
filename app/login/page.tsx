@@ -56,7 +56,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary">
             <Code2 className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">DevHub Pro</h1>
+          <h1 className="text-2xl font-bold text-foreground">Focusly Pro</h1>
           <p className="text-sm text-muted-foreground">Developer Productivity Suite</p>
         </div>
 
