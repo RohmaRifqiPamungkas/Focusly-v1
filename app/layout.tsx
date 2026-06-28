@@ -9,6 +9,14 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'Focusly Pro | Developer Productivity Suite',
   description: 'All your developer tools in one beautiful dashboard.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Focusly Pro',
+  },
+  formatDetection: {
+    telephone: false,
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
