@@ -26,9 +26,7 @@ function playCompletionSound() {
   } catch { /* Web Audio API not available */ }
 }
 
-// Timer state stays local — only settings and completed sessions go to Supabase
 const TIMER_KEY = 'devhub-pomodoro-timer'
-
 const DEFAULT_SETTINGS = { focus: 25, shortBreak: 5, longBreak: 15, dailyGoal: 8 }
 
 const DEFAULT_STATE: PomodoroState = {
@@ -46,37 +44,116 @@ export function usePomodoro() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevTimeRef = useRef(state.timeRemaining)
 
-  // Play sound on completion
+  // Fungsi pembantu untuk menyimpan sesi ke Supabase
+  const saveSessionToSupabase = useCallback((session: PomodoroSession) => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      createClient()
+        .from('pomodoro_sessions')
+        .insert({
+          id: session.id,
+          user_id: user.id,
+          mode: session.mode,
+          duration: session.duration,
+          completed_at: session.completedAt,
+        })
+        .then(({ error }) => {
+          if (error) console.error('[usePomodoro] session insert error:', error)
+        })
+    })
+  }, [])
+
+  // PERBAIKAN 1: Minta izin notifikasi browser saat pertama kali aplikasi dibuka
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [])
+
+  // PERBAIKAN 2: Penanganan suara & notifikasi ketika timer menyentuh 0 (Aktif maupun Minimize)
   useEffect(() => {
     if (prevTimeRef.current > 0 && state.timeRemaining === 0) {
-      playCompletionSound()
+      if (document.visibilityState === 'visible') {
+        // Jika aplikasi sedang dibuka di layar, putar bunyi synth biasa
+        playCompletionSound()
+      } else {
+        // JIKA DI-MINIMIZE: Kirim notifikasi sistem (Memicu getar/suara alert bawaan OS perangkat)
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Waktu Selesai! 🎯', {
+            body: state.mode === 'focus' ? 'Sesi fokus berakhir, mari istirahat sejenak!' : 'Waktu istirahat selesai, yuk kembali produktif!',
+            icon: '/favicon.ico',
+          })
+        }
+        // Tetap jalankan fungsi audio sebagai fallback
+        playCompletionSound()
+      }
     }
     prevTimeRef.current = state.timeRemaining
-  }, [state.timeRemaining])
+  }, [state.timeRemaining, state.mode])
 
-  // Load timer state from localStorage and settings from Supabase
-  useEffect(() => {
-    // Restore timer position from localStorage
+  // Fungsi sinkronisasi mandiri untuk mencocokkan waktu asli vs waktu tersimpan
+  const syncTimerState = useCallback(() => {
     try {
       const stored = localStorage.getItem(TIMER_KEY)
-      if (stored) {
-        const parsed: PomodoroState = JSON.parse(stored)
-        if (parsed.isRunning && parsed.startedAt) {
-          const elapsed = Math.floor((Date.now() - parsed.startedAt) / 1000)
-          const newRemaining = Math.max(0, parsed.timeRemaining - elapsed)
+      if (!stored) return
+
+      const parsed: PomodoroState = JSON.parse(stored)
+      if (parsed.isRunning && parsed.startedAt) {
+        const elapsed = Math.floor((Date.now() - parsed.startedAt) / 1000)
+        const newRemaining = Math.max(0, parsed.timeRemaining - elapsed)
+
+        if (newRemaining <= 0 && parsed.timeRemaining > 0) {
+          // Kasus: Timer habis saat aplikasi di-minimize atau di-close
+          const completedAtTime = new Date(parsed.startedAt + parsed.timeRemaining * 1000).toISOString()
+          const session: PomodoroSession = {
+            id: generateId(),
+            mode: parsed.mode,
+            duration: getModeDuration(parsed.mode, parsed.settings),
+            completedAt: completedAtTime,
+          }
+
+          saveSessionToSupabase(session)
+
+          const next: PomodoroState = {
+            ...parsed,
+            isRunning: false,
+            timeRemaining: 0,
+            sessions: [...parsed.sessions, session],
+            startedAt: undefined,
+          }
+          setState(next)
+          localStorage.setItem(TIMER_KEY, JSON.stringify(next))
+        } else {
+          // Kasus: Masih ada sisa waktu berjalan
           setState({
             ...parsed,
-            timeRemaining: newRemaining > 0 ? newRemaining : 0,
+            timeRemaining: newRemaining,
             isRunning: newRemaining > 0,
             startedAt: newRemaining > 0 ? Date.now() : undefined,
           })
-        } else {
-          setState(parsed)
         }
+      } else {
+        setState(parsed)
       }
     } catch { /* ignore */ }
+  }, [saveSessionToSupabase])
 
-    // Load settings and today's sessions from Supabase
+  // Pantau transisi Page Visibility (Minimize <-> Open)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncTimerState() // Hitung ulang gap waktu secara real-time saat aplikasi dibuka lagi
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [syncTimerState])
+
+  // Load awal saat aplikasi pertama kali di-close lalu dibuka kembali
+  useEffect(() => {
+    syncTimerState()
+
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setSettingsLoaded(true); return }
@@ -93,17 +170,14 @@ export function usePomodoro() {
       if (settingsRes.error && settingsRes.error.code !== 'PGRST116') {
         console.error('[usePomodoro] settings fetch error:', settingsRes.error)
       }
-      if (sessionsRes.error) {
-        console.error('[usePomodoro] sessions fetch error:', sessionsRes.error)
-      }
 
       const settings = settingsRes.data
         ? {
-            focus: settingsRes.data.focus,
-            shortBreak: settingsRes.data.short_break,
-            longBreak: settingsRes.data.long_break,
-            dailyGoal: settingsRes.data.daily_goal,
-          }
+          focus: settingsRes.data.focus,
+          shortBreak: settingsRes.data.short_break,
+          longBreak: settingsRes.data.long_break,
+          dailyGoal: settingsRes.data.daily_goal,
+        }
         : DEFAULT_SETTINGS
 
       const sessions: PomodoroSession[] = (sessionsRes.data ?? []).map((r) => ({
@@ -119,54 +193,44 @@ export function usePomodoro() {
           ...prev,
           settings,
           sessions,
-          // Only reset timeRemaining if we have fresh settings and no saved timer
           timeRemaining: localStorage.getItem(TIMER_KEY) ? prev.timeRemaining : duration,
         }
       })
       setSettingsLoaded(true)
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Persist timer position to localStorage every tick
   const saveTimer = useCallback((s: PomodoroState) => {
     setState(s)
     try { localStorage.setItem(TIMER_KEY, JSON.stringify(s)) } catch { /* ignore */ }
   }, [])
 
-  // Countdown interval
+  // Menggunakan delta waktu (Timestamp) di dalam interval untuk mencegah lag/throttling browser
   useEffect(() => {
-    if (state.isRunning) {
+    if (state.isRunning && state.startedAt) {
+      const startTime = state.startedAt
+      const startRemaining = state.timeRemaining
+
       intervalRef.current = setInterval(() => {
+        const totalElapsed = Math.floor((Date.now() - startTime) / 1000)
+        const newRemaining = Math.max(0, startRemaining - totalElapsed)
+
         setState((prev) => {
           if (!prev.isRunning) return prev
-          const newRemaining = prev.timeRemaining - 1
+
           if (newRemaining <= 0) {
+            if (intervalRef.current) clearInterval(intervalRef.current)
+
             const session: PomodoroSession = {
               id: generateId(),
               mode: prev.mode,
-              duration:
-                prev.settings[
-                  prev.mode === 'focus' ? 'focus' : prev.mode === 'short-break' ? 'shortBreak' : 'longBreak'
-                ] * 60,
+              duration: getModeDuration(prev.mode, prev.settings),
               completedAt: new Date().toISOString(),
             }
-            // Persist completed session to Supabase
-            createClient().auth.getUser().then(({ data: { user } }) => {
-              if (!user) return
-              createClient()
-                .from('pomodoro_sessions')
-                .insert({
-                  id: session.id,
-                  user_id: user.id,
-                  mode: session.mode,
-                  duration: session.duration,
-                  completed_at: session.completedAt,
-                })
-                .then(({ error }) => {
-                  if (error) console.error('[usePomodoro] session insert error:', error)
-                })
-            })
+
+            saveSessionToSupabase(session)
+
             const next: PomodoroState = {
               ...prev,
               isRunning: false,
@@ -177,6 +241,8 @@ export function usePomodoro() {
             try { localStorage.setItem(TIMER_KEY, JSON.stringify(next)) } catch { /* ignore */ }
             return next
           }
+
+          // Update berkala dengan kalkulasi timestamp agar tetap presisi 100%
           const next = { ...prev, timeRemaining: newRemaining }
           try { localStorage.setItem(TIMER_KEY, JSON.stringify(next)) } catch { /* ignore */ }
           return next
@@ -186,10 +252,11 @@ export function usePomodoro() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [state.isRunning])
+  }, [state.isRunning, state.startedAt, saveSessionToSupabase])
 
   const start = useCallback(() => {
-    saveTimer({ ...state, isRunning: true, startedAt: Date.now() })
+    const now = Date.now()
+    saveTimer({ ...state, isRunning: true, startedAt: now })
   }, [state, saveTimer])
 
   const pause = useCallback(() => {
