@@ -14,6 +14,7 @@ type DbTask = {
   deadline?: string
   created_at: string
   order: number
+  cover?: string
 }
 
 function toTask(row: DbTask): Task {
@@ -27,6 +28,7 @@ function toTask(row: DbTask): Task {
     deadline: row.deadline,
     createdAt: row.created_at,
     order: row.order,
+    cover: row.cover,
   }
 }
 
@@ -64,6 +66,7 @@ export function useTodos() {
       status: TaskStatus
       category?: string
       deadline?: string
+      cover?: string
     }) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -87,6 +90,7 @@ export function useTodos() {
         deadline: data.deadline ?? null,
         created_at: now,
         order: tasks.length,
+        cover: data.cover ?? null,
       })
 
       if (error) {
@@ -110,6 +114,7 @@ export function useTodos() {
       if ('category' in updates) dbPatch.category = updates.category ?? null
       if ('deadline' in updates) dbPatch.deadline = updates.deadline ?? null
       if ('order' in updates) dbPatch.order = updates.order
+      if ('cover' in updates) dbPatch.cover = updates.cover ?? null
 
       const { error } = await supabase.from('tasks').update(dbPatch).eq('id', id)
       if (error) console.error('[useTodos] update error:', error)
@@ -140,15 +145,28 @@ export function useTodos() {
   }, [])
 
   const reorderTasks = useCallback(async (newTasks: Task[]) => {
+    const changed = newTasks.filter((t) => {
+      const existing = tasks.find((prev) => prev.id === t.id)
+      return !existing || existing.order !== t.order || existing.status !== t.status
+    })
+
     setTasks(newTasks)
+
+    if (changed.length === 0) return
+
     const supabase = createClient()
     const results = await Promise.all(
-      newTasks.map((t, i) => supabase.from('tasks').update({ order: i }).eq('id', t.id))
+      changed.map((t) =>
+        supabase
+          .from('tasks')
+          .update({ order: t.order, status: t.status })
+          .eq('id', t.id)
+      )
     )
     results.forEach(({ error }) => {
       if (error) console.error('[useTodos] reorder error:', error)
     })
-  }, [])
+  }, [tasks])
 
   return { tasks, loading, error, addTask, updateTask, deleteTask, reorderTasks, toggleTask }
 }
