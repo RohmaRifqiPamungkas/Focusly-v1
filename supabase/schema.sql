@@ -36,7 +36,8 @@ create table if not exists tasks (
   deadline     timestamptz,
   created_at   timestamptz not null default now(),
   "order"      int not null default 0,
-  cover        text
+  cover        text,
+  branch_name  text
 );
 
 alter table tasks enable row level security;

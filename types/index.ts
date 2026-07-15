@@ -13,6 +13,7 @@ export interface Task {
   createdAt: string
   order: number
   cover?: string
+  branchName?: string
 }
 
 export interface Note {
