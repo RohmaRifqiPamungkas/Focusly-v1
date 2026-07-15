@@ -15,6 +15,7 @@ type DbTask = {
   created_at: string
   order: number
   cover?: string
+  branch_name?: string
 }
 
 function toTask(row: DbTask): Task {
@@ -29,6 +30,7 @@ function toTask(row: DbTask): Task {
     createdAt: row.created_at,
     order: row.order,
     cover: row.cover,
+    branchName: row.branch_name,
   }
 }
 
@@ -67,6 +69,7 @@ export function useTodos() {
       category?: string
       deadline?: string
       cover?: string
+      branchName?: string
     }) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -91,6 +94,7 @@ export function useTodos() {
         created_at: now,
         order: tasks.length,
         cover: data.cover ?? null,
+        branch_name: data.branchName ?? null,
       })
 
       if (error) {
@@ -115,6 +119,7 @@ export function useTodos() {
       if ('deadline' in updates) dbPatch.deadline = updates.deadline ?? null
       if ('order' in updates) dbPatch.order = updates.order
       if ('cover' in updates) dbPatch.cover = updates.cover ?? null
+      if ('branchName' in updates) dbPatch.branch_name = updates.branchName ?? null
 
       const { error } = await supabase.from('tasks').update(dbPatch).eq('id', id)
       if (error) console.error('[useTodos] update error:', error)
