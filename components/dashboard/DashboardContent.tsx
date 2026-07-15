@@ -24,7 +24,7 @@ function priorityVariant(p: Priority) {
 }
 
 function statusLabel(s: TaskStatus): string {
-  return ({ todo: 'Todo', 'in-progress': 'In Progress', completed: 'Done' })[s]
+  return ({ backlog: 'Backlog', todo: 'Todo', 'in-progress': 'In Progress', review: 'Review', completed: 'Done' })[s]
 }
 
 function PomodoroCircle({ progress, time, label }: { progress: number; time: string; label: string }) {
