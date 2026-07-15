@@ -656,7 +656,7 @@ function TaskDetailDialog({ task, open, onClose, onEdit, onUpdate, onPreviewImag
 
   const handleRemoveAttachment = (indexToRemove: number) => {
     const updated = attachments.filter((_, i) => i !== indexToRemove)
-    const newCover = updated.length > 0 ? JSON.stringify(updated) : null
+    const newCover = updated.length > 0 ? JSON.stringify(updated) : undefined
     onUpdate(task.id, { cover: newCover })
   }
 
