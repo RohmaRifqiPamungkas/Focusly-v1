@@ -44,6 +44,18 @@ export function usePomodoro() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevTimeRef = useRef(state.timeRemaining)
 
+  // PERBAIKAN: Fungsi pembantu diperkuat agar mampu mendeteksi electronAPI global secara aman
+  const updateElectronMenuBar = useCallback((text: string) => {
+    if (typeof window !== 'undefined') {
+      const electron = (window as any).electronAPI || (globalThis as any).electronAPI
+      if (electron && typeof electron.updateTimer === 'function') {
+        electron.updateTimer(text)
+      } else {
+        console.warn('Electron API tidak terdeteksi pada lingkup window.')
+      }
+    }
+  }, [])
+
   // Fungsi pembantu untuk menyimpan sesi ke Supabase
   const saveSessionToSupabase = useCallback((session: PomodoroSession) => {
     createClient().auth.getUser().then(({ data: { user } }) => {
@@ -63,28 +75,25 @@ export function usePomodoro() {
     })
   }, [])
 
-  // PERBAIKAN 1: Minta izin notifikasi browser saat pertama kali aplikasi dibuka
+  // Minta izin notifikasi browser saat pertama kali aplikasi dibuka
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, [])
 
-  // PERBAIKAN 2: Penanganan suara & notifikasi ketika timer menyentuh 0 (Aktif maupun Minimize)
+  // Penanganan suara & notifikasi ketika timer menyentuh 0 (Aktif maupun Minimize)
   useEffect(() => {
     if (prevTimeRef.current > 0 && state.timeRemaining === 0) {
       if (document.visibilityState === 'visible') {
-        // Jika aplikasi sedang dibuka di layar, putar bunyi synth biasa
         playCompletionSound()
       } else {
-        // JIKA DI-MINIMIZE: Kirim notifikasi sistem (Memicu getar/suara alert bawaan OS perangkat)
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Waktu Selesai! 🎯', {
             body: state.mode === 'focus' ? 'Sesi fokus berakhir, mari istirahat sejenak!' : 'Waktu istirahat selesai, yuk kembali produktif!',
             icon: '/favicon.ico',
           })
         }
-        // Tetap jalankan fungsi audio sebagai fallback
         playCompletionSound()
       }
     }
@@ -103,7 +112,6 @@ export function usePomodoro() {
         const newRemaining = Math.max(0, parsed.timeRemaining - elapsed)
 
         if (newRemaining <= 0 && parsed.timeRemaining > 0) {
-          // Kasus: Timer habis saat aplikasi di-minimize atau di-close
           const completedAtTime = new Date(parsed.startedAt + parsed.timeRemaining * 1000).toISOString()
           const session: PomodoroSession = {
             id: generateId(),
@@ -113,6 +121,7 @@ export function usePomodoro() {
           }
 
           saveSessionToSupabase(session)
+          updateElectronMenuBar('') // Bersihkan Menu Bar karena waktu habis
 
           const next: PomodoroState = {
             ...parsed,
@@ -124,7 +133,6 @@ export function usePomodoro() {
           setState(next)
           localStorage.setItem(TIMER_KEY, JSON.stringify(next))
         } else {
-          // Kasus: Masih ada sisa waktu berjalan
           setState({
             ...parsed,
             timeRemaining: newRemaining,
@@ -136,13 +144,13 @@ export function usePomodoro() {
         setState(parsed)
       }
     } catch { /* ignore */ }
-  }, [saveSessionToSupabase])
+  }, [saveSessionToSupabase, updateElectronMenuBar])
 
   // Pantau transisi Page Visibility (Minimize <-> Open)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        syncTimerState() // Hitung ulang gap waktu secara real-time saat aplikasi dibuka lagi
+        syncTimerState()
       }
     }
 
@@ -216,6 +224,11 @@ export function usePomodoro() {
         const totalElapsed = Math.floor((Date.now() - startTime) / 1000)
         const newRemaining = Math.max(0, startRemaining - totalElapsed)
 
+        // SINKRONISASI UPDATE MAC MENU BAR ELEKTRON (DI SINI)
+        const minutes = Math.floor(newRemaining / 60).toString().padStart(2, '0')
+        const seconds = (newRemaining % 60).toString().padStart(2, '0')
+        updateElectronMenuBar(`${minutes}:${seconds}`)
+
         setState((prev) => {
           if (!prev.isRunning) return prev
 
@@ -230,6 +243,7 @@ export function usePomodoro() {
             }
 
             saveSessionToSupabase(session)
+            updateElectronMenuBar('') // Hapus timer di menu bar atas saat durasi selesai
 
             const next: PomodoroState = {
               ...prev,
@@ -242,7 +256,6 @@ export function usePomodoro() {
             return next
           }
 
-          // Update berkala dengan kalkulasi timestamp agar tetap presisi 100%
           const next = { ...prev, timeRemaining: newRemaining }
           try { localStorage.setItem(TIMER_KEY, JSON.stringify(next)) } catch { /* ignore */ }
           return next
@@ -252,7 +265,7 @@ export function usePomodoro() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [state.isRunning, state.startedAt, saveSessionToSupabase])
+  }, [state.isRunning, state.startedAt, saveSessionToSupabase, updateElectronMenuBar])
 
   const start = useCallback(() => {
     const now = Date.now()
@@ -260,15 +273,18 @@ export function usePomodoro() {
   }, [state, saveTimer])
 
   const pause = useCallback(() => {
+    updateElectronMenuBar('') // Kosongkan Menu Bar saat di-pause
     saveTimer({ ...state, isRunning: false, startedAt: undefined })
-  }, [state, saveTimer])
+  }, [state, saveTimer, updateElectronMenuBar])
 
   const reset = useCallback(() => {
+    updateElectronMenuBar('') // Kosongkan Menu Bar saat di-reset
     const duration = getModeDuration(state.mode, state.settings)
     saveTimer({ ...state, isRunning: false, timeRemaining: duration, startedAt: undefined })
-  }, [state, saveTimer])
+  }, [state, saveTimer, updateElectronMenuBar])
 
   const setMode = useCallback((mode: PomodoroMode) => {
+    updateElectronMenuBar('')
     const duration = getModeDuration(mode, state.settings)
     const labelMap: Record<PomodoroMode, string> = {
       focus: 'Deep Work',
@@ -276,7 +292,7 @@ export function usePomodoro() {
       'long-break': 'Long Break',
     }
     saveTimer({ ...state, mode, isRunning: false, timeRemaining: duration, startedAt: undefined, label: labelMap[mode] })
-  }, [state, saveTimer])
+  }, [state, saveTimer, updateElectronMenuBar])
 
   const skip = useCallback(() => {
     const modeOrder: PomodoroMode[] = ['focus', 'short-break', 'long-break']
