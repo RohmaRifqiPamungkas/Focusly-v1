@@ -1,5 +1,5 @@
 export type Priority = 'low' | 'medium' | 'high' | 'critical'
-export type TaskStatus = 'todo' | 'in-progress' | 'completed'
+export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'review' | 'completed'
 export type PomodoroMode = 'focus' | 'short-break' | 'long-break'
 
 export interface Task {
@@ -12,6 +12,7 @@ export interface Task {
   deadline?: string
   createdAt: string
   order: number
+  cover?: string
 }
 
 export interface Note {
