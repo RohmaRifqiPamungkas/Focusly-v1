@@ -6,7 +6,8 @@ import {
   Circle, GripVertical, List, LayoutGrid, Eye,
   X, Check, Sparkles, Folder, Tag, AlertTriangle,
   Bold, Italic, ListOrdered, CheckSquare,
-  Image as ImageIcon, Loader2, Paperclip, ExternalLink
+  Image as ImageIcon, Loader2, Paperclip, ExternalLink,
+  GitBranch, Copy
 } from 'lucide-react'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -94,6 +95,17 @@ function statusHeaderColor(s: TaskStatus): string {
     review: 'text-amber-600 dark:text-amber-400',
     completed: 'text-emerald-600 dark:text-emerald-400',
   })[s]
+}
+
+function getSuggestedBranchName(title: string, priority: Priority): string {
+  const prefix = (priority === 'critical' || priority === 'high') ? 'bugfix/' : 'feature/'
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim()
+  return prefix + slug
 }
 
 function getAttachments(coverValue?: string): string[] {
@@ -427,11 +439,13 @@ interface TaskFormData {
   category: string
   deadline: string
   cover: string
+  branchName: string
 }
 
 const DEFAULT_FORM: TaskFormData = {
   title: '', description: '', priority: 'medium',
   status: 'todo', category: '', deadline: '', cover: '',
+  branchName: '',
 }
 
 function TaskDialog({ open, onClose, onSave, initial, defaultStatus = 'todo', onPreviewImage }: {
@@ -458,6 +472,7 @@ function TaskDialog({ open, onClose, onSave, initial, defaultStatus = 'todo', on
             category: initial.category ?? '',
             deadline: initial.deadline ? initial.deadline.slice(0, 10) : '',
             cover: initial.cover ?? '',
+            branchName: initial.branchName ?? '',
           }
         : { ...DEFAULT_FORM, status: defaultStatus }
     )
@@ -523,6 +538,33 @@ function TaskDialog({ open, onClose, onSave, initial, defaultStatus = 'todo', on
             <div className="grid gap-1.5">
               <Label>Deadline</Label>
               <Input type="date" value={form.deadline} onChange={(e) => set('deadline')(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">Git Branch (Optional)</span>
+              {form.title.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const suggested = getSuggestedBranchName(form.title, form.priority)
+                    set('branchName')(suggested)
+                  }}
+                  className="text-[10px] text-indigo-500 hover:underline font-semibold cursor-pointer"
+                >
+                  Suggest Branch Name
+                </button>
+              )}
+            </Label>
+            <div className="relative">
+              <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                className="pl-9 font-mono text-xs text-foreground" 
+                placeholder="e.g. feature/add-git-integration" 
+                value={form.branchName} 
+                onChange={(e) => set('branchName')(e.target.value)} 
+              />
             </div>
           </div>
 
@@ -638,8 +680,31 @@ function TaskDetailDialog({ task, open, onClose, onEdit, onUpdate, onPreviewImag
   onUpdate: (id: string, updates: Partial<Task>) => void
   onPreviewImage: (url: string) => void
 }) {
+  const [editingBranch, setEditingBranch] = useState(false)
+  const [localBranch, setLocalBranch] = useState('')
+  const [copiedText, setCopiedText] = useState<'branch' | 'command' | null>(null)
+
+  useEffect(() => {
+    if (task) {
+      setLocalBranch(task.branchName || '')
+    }
+  }, [task?.branchName, task])
+
   if (!task) return null
   const attachments = getAttachments(task.cover)
+
+  const handleSaveBranch = () => {
+    onUpdate(task.id, { branchName: localBranch.trim() || undefined })
+    setEditingBranch(false)
+  }
+
+  const copyToClipboard = (text: string, type: 'branch' | 'command') => {
+    navigator.clipboard.writeText(text)
+    setCopiedText(type)
+    setTimeout(() => setCopiedText(null), 2000)
+  }
+
+  const suggestedBranch = getSuggestedBranchName(task.title, task.priority)
 
   const handleToggleTodo = (lineIndex: number, isChecked: boolean) => {
     if (!task.description) return
@@ -696,6 +761,94 @@ function TaskDetailDialog({ task, open, onClose, onEdit, onUpdate, onPreviewImag
             ) : (
               <p className="text-sm text-muted-foreground italic pl-1">No description provided.</p>
             )}
+          </div>
+
+          {/* Git Branch Integration Section */}
+          <div className="space-y-3 border-t border-border/60 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <GitBranch className="w-3.5 h-3.5 text-indigo-500" /> Git Branch Integration
+            </p>
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              {/* Branch Name Field */}
+              <div className="space-y-1.5 p-3 rounded-xl border border-border/80 bg-muted/15 flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Git Branch</p>
+                  {editingBranch ? (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <Input 
+                        value={localBranch} 
+                        onChange={(e) => setLocalBranch(e.target.value)}
+                        placeholder="e.g. feature/todo-filters"
+                        className="h-8 text-xs font-mono"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveBranch()
+                          if (e.key === 'Escape') { setLocalBranch(task.branchName || ''); setEditingBranch(false) }
+                        }}
+                      />
+                      <Button size="sm" className="h-8 px-2" onClick={handleSaveBranch}><Check className="w-3 h-3" /></Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setLocalBranch(task.branchName || ''); setEditingBranch(false) }}><X className="w-3 h-3" /></Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 mt-1.5">
+                      {task.branchName ? (
+                        <span className="text-xs font-mono font-medium text-foreground bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 truncate">
+                          {task.branchName}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">No branch assigned</span>
+                      )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button 
+                          onClick={() => setEditingBranch(true)}
+                          className="text-[10px] text-primary hover:underline font-semibold cursor-pointer bg-transparent border-none"
+                        >
+                          {task.branchName ? 'Edit' : 'Assign'}
+                        </button>
+                        {task.branchName && (
+                          <button 
+                            onClick={() => copyToClipboard(task.branchName!, 'branch')}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none"
+                            title="Copy branch name"
+                          >
+                            {copiedText === 'branch' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {!task.branchName && !editingBranch && (
+                  <button
+                    onClick={() => {
+                      setLocalBranch(suggestedBranch)
+                      onUpdate(task.id, { branchName: suggestedBranch })
+                    }}
+                    className="text-[10px] mt-2.5 text-indigo-500 hover:text-indigo-600 font-bold flex items-center gap-1 text-left cursor-pointer transition-colors bg-transparent border-none p-0"
+                  >
+                    Use Suggested: <span className="font-mono bg-indigo-500/5 border border-indigo-500/10 px-1 rounded">{suggestedBranch}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Suggested command box */}
+              <div className="space-y-1.5 p-3 rounded-xl border border-border/80 bg-muted/15 flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Checkout Command</p>
+                  <div className="flex items-center justify-between gap-1.5 mt-1.5 p-2 rounded bg-black/5 dark:bg-black/25 border border-border/60 font-mono text-[10px] text-foreground">
+                    <span className="truncate">git checkout -b {task.branchName || suggestedBranch}</span>
+                    <button 
+                      onClick={() => copyToClipboard(`git checkout -b ${task.branchName || suggestedBranch}`, 'command')}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0 cursor-pointer bg-transparent border-none"
+                      title="Copy git checkout command"
+                    >
+                      {copiedText === 'command' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[9px] mt-2.5 text-muted-foreground">Run this in your terminal to create and switch to this task's branch.</p>
+              </div>
+            </div>
           </div>
 
           {/* Attachments Section */}
@@ -834,6 +987,12 @@ function SortableTaskItem({ task, onToggle, onEdit, onDelete, onDetail }: {
               <span className="text-xs text-muted-foreground">{format(new Date(task.deadline), 'MMM d')}</span>
             </div>
           )}
+          {task.branchName && (
+            <div className="flex items-center gap-1 text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded text-[10px] font-semibold max-w-[150px] truncate" title={`Git Branch: ${task.branchName}`}>
+              <GitBranch className="w-3.5 h-3.5 shrink-0" />
+              <span>{task.branchName}</span>
+            </div>
+          )}
           {task.description && task.description.length > DESC_PREVIEW_LIMIT && (
             <button
               onClick={(e) => { e.stopPropagation(); onDetail() }}
@@ -952,6 +1111,12 @@ function BoardCard({ task, onEdit, onDelete, onDetail, isOverlay = false }: {
           {task.cover && getAttachments(task.cover).length > 0 && (
             <span className="flex items-center gap-0.5 px-1.5 py-0 rounded border border-border/50 text-muted-foreground bg-muted/20 font-medium text-[9px]" title="Has attachments">
               <Paperclip className="w-2.5 h-2.5" /> {getAttachments(task.cover).length}
+            </span>
+          )}
+          {task.branchName && (
+            <span className="flex items-center gap-0.5 px-1.5 py-0 rounded border border-indigo-500/20 text-indigo-500 bg-indigo-500/10 font-semibold text-[9px] max-w-[120px] truncate" title={`Git Branch: ${task.branchName}`}>
+              <GitBranch className="w-2.5 h-2.5 shrink-0" />
+              {task.branchName}
             </span>
           )}
         </div>
@@ -1557,6 +1722,7 @@ export function TodoContent() {
               category: data.category,
               deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
               cover: data.cover || undefined,
+              branchName: data.branchName || undefined,
             })
           } else {
             addTask({
@@ -1567,6 +1733,7 @@ export function TodoContent() {
               category: data.category,
               deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
               cover: data.cover || undefined,
+              branchName: data.branchName || undefined,
             })
           }
         }}
