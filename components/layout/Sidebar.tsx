@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ListTodo, Timer, StickyNote, Code2,
-  Braces, Clock, Settings, User, LogOut, HelpCircle, X,
+  Braces, Clock, Settings, User, LogOut, HelpCircle, X, KeyRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/lib/sidebar-context'
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/json-formatter', label: 'JSON Formatter', icon: Code2 },
   { href: '/base64', label: 'Base64', icon: Braces },
   { href: '/timestamp', label: 'Timestamp', icon: Clock },
+  { href: '/password-hash', label: 'Password Hasher', icon: KeyRound },
 ]
 
 const bottomItems = [
