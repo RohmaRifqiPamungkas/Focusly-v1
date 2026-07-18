@@ -1,9 +1,3 @@
--- ============================================================
--- DevHub Pro — Supabase Schema
--- Jalankan seluruh file ini di Supabase SQL Editor
--- Jika tabel sudah ada, jalankan hanya bagian GRANT di bawah
--- ============================================================
-
 -- NOTES
 create table if not exists notes (
   id           text primary key,
