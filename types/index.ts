@@ -22,6 +22,7 @@ export interface Note {
   content: string
   tags: string[]
   pinned: boolean
+  color?: string
   createdAt: string
   updatedAt: string
 }
