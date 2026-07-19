@@ -10,6 +10,7 @@ type DbNote = {
   content: string
   tags: string[]
   pinned: boolean
+  color?: string
   created_at: string
   updated_at: string
 }
@@ -21,6 +22,7 @@ function toNote(row: DbNote): Note {
     content: row.content,
     tags: row.tags ?? [],
     pinned: row.pinned,
+    color: row.color,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -53,7 +55,7 @@ export function useNotes() {
   }, [])
 
   const addNote = useCallback(
-    async (data: { title: string; content: string; tags: string[] }) => {
+    async (data: { title: string; content: string; tags: string[]; color?: string }) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -72,6 +74,7 @@ export function useNotes() {
         content: data.content,
         tags: data.tags,
         pinned: false,
+        color: data.color ?? null,
         created_at: now,
         updated_at: now,
       })
@@ -97,6 +100,7 @@ export function useNotes() {
       if ('content' in updates) dbPatch.content = updates.content
       if ('tags' in updates) dbPatch.tags = updates.tags
       if ('pinned' in updates) dbPatch.pinned = updates.pinned
+      if ('color' in updates) dbPatch.color = updates.color ?? null
 
       const { error } = await supabase.from('notes').update(dbPatch).eq('id', id)
       if (error) console.error('[useNotes] update error:', error)
